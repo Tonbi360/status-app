@@ -57,13 +57,17 @@ async function handleFile(input) {
     } catch (e) { msg.innerText = "ERROR"; }
 }
 
-async function loadFeed() {
+async function loadFeed(silent = false) {
     const grid = document.getElementById('feed-grid');
-    grid.innerHTML = "";
+    if (!silent) grid.innerHTML = "<p class='text-gray-600 animate-pulse'>Fetching statuses...</p>";
+    
     try {
         const res = await fetch(GOOGLE_SCRIPT_URL);
         allStatuses = await res.json();
-        allStatuses.reverse().forEach((s, index) => {
+        allStatuses.reverse();
+        
+        grid.innerHTML = "";
+        allStatuses.forEach((s, index) => {
             const el = document.createElement('div');
             el.className = "relative aspect-vertical bg-gray-900 rounded-2xl overflow-hidden border border-gray-800 cursor-pointer active:scale-95 transition-transform";
             el.onclick = () => openViewer(index);
@@ -83,22 +87,23 @@ async function loadFeed() {
                 </div>`;
             grid.appendChild(el);
         });
-    } catch (e) {}
+    } catch (e) {
+        if (!silent) grid.innerHTML = "Failed to load feed.";
+    }
 }
 
 function openViewer(index) {
     currentIndex = index;
     document.getElementById('viewer').classList.add('active');
     renderStatus();
-    countView(allStatuses[index].MediaURL);
 }
 
-// NEW: Function to send view increment to Google Sheets
 async function countView(url) {
+    // Send userId so Google Sheets can count uniquely
     fetch(GOOGLE_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
-        body: JSON.stringify({ action: "incrementView", mediaUrl: url })
+        body: JSON.stringify({ action: "incrementView", mediaUrl: url, userId: userId })
     });
 }
 
@@ -107,7 +112,10 @@ function renderStatus() {
     const s = allStatuses[currentIndex];
     const content = document.getElementById('viewer-content');
     const container = document.getElementById('progress-container');
+    const viewCountEl = document.getElementById('viewer-view-count');
+    
     document.getElementById('viewer-name').innerText = s.Username;
+    viewCountEl.innerText = s.Views || 0;
 
     container.innerHTML = "";
     allStatuses.forEach((_, i) => {
@@ -128,6 +136,8 @@ function renderStatus() {
         const vid = document.getElementById('story-video');
         vid.onloadedmetadata = () => startTimer(vid.duration * 1000);
     }
+    
+    countView(s.MediaURL);
 }
 
 function startTimer(duration) {
@@ -145,7 +155,6 @@ function nextStatus() {
     if (currentIndex < allStatuses.length - 1) {
         currentIndex++;
         renderStatus();
-        countView(allStatuses[currentIndex].MediaURL);
     } else {
         closeViewer();
     }
@@ -169,7 +178,7 @@ function closeViewer() {
     clearTimers();
     document.getElementById('viewer').classList.remove('active');
     document.getElementById('viewer-content').innerHTML = "";
-    loadFeed(); // Refresh feed to show new view counts
+    loadFeed(true); // Silent refresh so the UI doesn't jump
 }
 
 if ('serviceWorker' in navigator) {

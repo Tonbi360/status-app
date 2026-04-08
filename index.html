@@ -2,16 +2,20 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Status</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .aspect-vertical { aspect-ratio: 9/16; }
         #viewer { display: none; }
         #viewer.active { display: flex; }
+        body { -webkit-tap-highlight-color: transparent; }
     </style>
 </head>
-<body class="bg-black text-white font-sans overflow-x-hidden">
+<body class="bg-black text-white font-sans overflow-x-hidden select-none">
 
     <div id="app" class="min-h-screen w-full flex flex-col p-4">
         <header class="flex justify-between items-center py-4">
@@ -19,32 +23,27 @@
             <p id="user-display" class="text-gray-500 text-xs font-mono"></p>
         </header>
         
-        <!-- Setup View -->
         <div id="setup-area" class="hidden flex-1 flex flex-col items-center justify-center">
-            <input type="text" id="username-input" placeholder="Enter Nickname" class="bg-gray-900 border border-gray-700 p-4 rounded-2xl mb-4 w-72 text-center text-xl">
-            <button onclick="saveUser()" class="bg-blue-600 px-10 py-4 rounded-full font-bold shadow-lg shadow-blue-900/20">Start Sharing</button>
+            <input type="text" id="username-input" placeholder="Enter Nickname" class="bg-gray-900 border border-gray-700 p-4 rounded-2xl mb-4 w-72 text-center text-xl outline-none focus:border-blue-600 transition-colors">
+            <button onclick="saveUser()" class="bg-blue-600 px-10 py-4 rounded-full font-bold shadow-lg shadow-blue-900/20 active:scale-95 transition-transform">Start Sharing</button>
         </div>
 
-        <!-- Main View -->
         <div id="main-area" class="hidden flex-1 flex flex-col">
             <div class="flex flex-col items-center py-8 border-b border-gray-900">
                 <button id="upload-btn" onclick="document.getElementById('media-input').click()" class="bg-white text-black px-12 py-4 rounded-full font-black text-lg shadow-xl active:scale-95 transition-all">
                     + POST STATUS
                 </button>
                 <input type="file" id="media-input" class="hidden" accept="image/*,video/*" onchange="handleFile(this)">
-                <p id="status-msg" class="mt-4 text-xs text-blue-500 font-bold uppercase tracking-widest"></p>
+                <p id="status-msg" class="mt-4 text-[10px] text-blue-500 font-bold uppercase tracking-widest"></p>
             </div>
 
             <div class="mt-8">
                 <h2 class="text-sm font-black text-gray-500 uppercase tracking-[0.2em] mb-4">Discovery Feed</h2>
-                <div id="feed-grid" class="grid grid-cols-2 gap-4">
-                    <!-- Cards injected here -->
-                </div>
+                <div id="feed-grid" class="grid grid-cols-2 gap-4"></div>
             </div>
         </div>
     </div>
 
-    <!-- FULL SCREEN VIEWER OVERLAY -->
     <div id="viewer" class="fixed inset-0 bg-black z-50 flex-col items-center justify-center">
         <div class="absolute top-0 left-0 w-full p-4 z-50 flex flex-col gap-2 bg-gradient-to-b from-black/80 to-transparent">
             <div class="flex justify-between items-center">
@@ -52,10 +51,7 @@
                 <button onclick="closeViewer()" class="text-3xl p-2">&times;</button>
             </div>
         </div>
-        
-        <div id="viewer-content" class="w-full h-full flex items-center justify-center">
-            <!-- Media injected here -->
-        </div>
+        <div id="viewer-content" class="w-full h-full flex items-center justify-center"></div>
     </div>
 
     <script>
@@ -91,8 +87,7 @@
             const file = input.files[0];
             if (!file) return;
             const msg = document.getElementById('status-msg');
-            msg.innerText = "Processing...";
-            
+            msg.innerText = "UPLOADING...";
             const fileName = `${userId}_${Date.now()}.${file.name.split('.').pop()}`;
             try {
                 const up = await fetch(`${SUPABASE_URL}/storage/v1/object/status-media/${fileName}`, {
@@ -101,14 +96,12 @@
                     body: file
                 });
                 if (!up.ok) throw new Error();
-
                 const url = `${SUPABASE_URL}/storage/v1/object/public/status-media/${fileName}`;
                 await fetch(GOOGLE_SCRIPT_URL, {
                     method: 'POST',
                     mode: 'no-cors',
                     body: JSON.stringify({ userId, username, mediaUrl: url, type: file.type.startsWith('video') ? 'video' : 'image' })
                 });
-
                 msg.innerText = "POSTED!";
                 setTimeout(() => msg.innerText = "", 2000);
                 loadFeed();
@@ -125,13 +118,12 @@
                     const el = document.createElement('div');
                     el.className = "relative aspect-vertical bg-gray-900 rounded-2xl overflow-hidden border border-gray-800 cursor-pointer active:scale-95 transition-transform";
                     el.onclick = () => openViewer(index);
-                    
                     if (s.Type === 'image') {
                         el.innerHTML = `<img src="${s.MediaURL}" class="w-full h-full object-cover">`;
                     } else {
                         el.innerHTML = `<video src="${s.MediaURL}" class="w-full h-full object-cover" muted playsinline></video>`;
                     }
-                    el.innerHTML += `<div class="absolute bottom-0 p-3 w-full bg-gradient-to-t from-black/80 text-[10px] font-black uppercase">${s.Username}</div>`;
+                    el.innerHTML += `<div class="absolute bottom-0 p-3 w-full bg-gradient-to-t from-black/80 text-[10px] font-black uppercase tracking-wider">${s.Username}</div>`;
                     grid.appendChild(el);
                 });
             } catch (e) {}
@@ -142,19 +134,22 @@
             const viewer = document.getElementById('viewer');
             const content = document.getElementById('viewer-content');
             document.getElementById('viewer-name').innerText = s.Username;
-            
             if (s.Type === 'image') {
                 content.innerHTML = `<img src="${s.MediaURL}" class="max-w-full max-h-full object-contain">`;
             } else {
                 content.innerHTML = `<video src="${s.MediaURL}" class="max-w-full max-h-full" autoplay playsinline controls></video>`;
             }
-            
             viewer.classList.add('active');
         }
 
         function closeViewer() {
             document.getElementById('viewer').classList.remove('active');
             document.getElementById('viewer-content').innerHTML = "";
+        }
+
+        // Register Service Worker for PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(() => {});
         }
 
         init();

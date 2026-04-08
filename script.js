@@ -59,12 +59,14 @@ async function handleFile(input) {
 
 async function loadFeed(silent = false) {
     const grid = document.getElementById('feed-grid');
-    if (!silent) grid.innerHTML = "<p class='text-gray-600 animate-pulse'>Fetching statuses...</p>";
+    if (!silent) grid.innerHTML = "<p class='text-gray-600 animate-pulse'>Ranking statuses...</p>";
     
     try {
         const res = await fetch(GOOGLE_SCRIPT_URL);
         allStatuses = await res.json();
-        allStatuses.reverse();
+        
+        // SORT BY POPULARITY: Most likes (G) first
+        allStatuses.sort((a, b) => (Number(b.Likes) || 0) - (Number(a.Likes) || 0));
         
         grid.innerHTML = "";
         allStatuses.forEach((s, index) => {
@@ -78,6 +80,9 @@ async function loadFeed(silent = false) {
             
             el.innerHTML = `
                 ${mediaHtml}
+                <div class="absolute top-2 right-2 bg-orange-600 text-[10px] font-black px-2 py-1 rounded-full shadow-lg">
+                    🔥 ${s.Likes || 0}
+                </div>
                 <div class="absolute bottom-0 p-3 w-full bg-gradient-to-t from-black/90 flex justify-between items-end">
                     <span class="text-[10px] font-black uppercase tracking-wider truncate mr-2">${s.Username}</span>
                     <span class="text-[9px] font-bold text-gray-400 flex items-center gap-1">
@@ -88,7 +93,7 @@ async function loadFeed(silent = false) {
             grid.appendChild(el);
         });
     } catch (e) {
-        if (!silent) grid.innerHTML = "Failed to load feed.";
+        if (!silent) grid.innerHTML = "Failed to load poll.";
     }
 }
 
@@ -99,11 +104,26 @@ function openViewer(index) {
 }
 
 async function countView(url) {
-    // Send userId so Google Sheets can count uniquely
     fetch(GOOGLE_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
         body: JSON.stringify({ action: "incrementView", mediaUrl: url, userId: userId })
+    });
+}
+
+async function voteCurrent() {
+    const s = allStatuses[currentIndex];
+    const voteBtn = document.querySelector('#viewer-footer button');
+    
+    // Optimistic UI update
+    const countEl = document.getElementById('viewer-vote-count');
+    countEl.innerText = Number(countEl.innerText) + 1;
+    voteBtn.classList.add('opacity-50', 'pointer-events-none');
+
+    fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: JSON.stringify({ action: "incrementVote", mediaUrl: s.MediaURL, userId: userId })
     });
 }
 
@@ -112,10 +132,10 @@ function renderStatus() {
     const s = allStatuses[currentIndex];
     const content = document.getElementById('viewer-content');
     const container = document.getElementById('progress-container');
-    const viewCountEl = document.getElementById('viewer-view-count');
     
     document.getElementById('viewer-name').innerText = s.Username;
-    viewCountEl.innerText = s.Views || 0;
+    document.getElementById('viewer-view-count').innerText = s.Views || 0;
+    document.getElementById('viewer-vote-count').innerText = s.Likes || 0;
 
     container.innerHTML = "";
     allStatuses.forEach((_, i) => {
@@ -178,7 +198,7 @@ function closeViewer() {
     clearTimers();
     document.getElementById('viewer').classList.remove('active');
     document.getElementById('viewer-content').innerHTML = "";
-    loadFeed(true); // Silent refresh so the UI doesn't jump
+    loadFeed(true);
 }
 
 if ('serviceWorker' in navigator) {

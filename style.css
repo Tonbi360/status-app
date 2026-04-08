@@ -1,0 +1,23 @@
+/* Custom Aspect Ratio for Status Cards */
+.aspect-vertical { 
+    aspect-ratio: 9/16; 
+}
+
+/* Viewer Overlay Logic */
+#viewer { 
+    display: none; 
+}
+
+#viewer.active { 
+    display: flex; 
+}
+
+/* Mobile UX Fixes */
+body { 
+    -webkit-tap-highlight-color: transparent; 
+}
+
+/* Smooth Scrolling for Feed */
+#feed-grid {
+    scroll-behavior: smooth;
+}

@@ -15,9 +15,33 @@
 /* Mobile UX Fixes */
 body { 
     -webkit-tap-highlight-color: transparent; 
+    overscroll-behavior: none;
+}
+
+/* Progress Bar Styles */
+.progress-bar {
+    height: 2px;
+    background: rgba(255, 255, 255, 0.3);
+    flex: 1;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.progress-filler {
+    height: 100%;
+    background: white;
+    width: 0%;
+    transition: width 0.1s linear;
 }
 
 /* Smooth Scrolling for Feed */
 #feed-grid {
     scroll-behavior: smooth;
+}
+
+/* Ensure images/videos in viewer are properly contained */
+#viewer-content img, #viewer-content video {
+    max-width: 100%;
+    max-height: 100%;
+    object-contain: contain;
 }

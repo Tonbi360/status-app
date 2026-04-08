@@ -5,6 +5,10 @@ const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxNFRzxTH00cc
 let userId = localStorage.getItem('status_userId');
 let username = localStorage.getItem('status_username');
 let allStatuses = [];
+let currentIndex = 0;
+let storyTimeout;
+let progressInterval;
+const STORY_DURATION = 5000; // 5 seconds for images
 
 function init() {
     if (userId && username) {
@@ -14,6 +18,10 @@ function init() {
     } else {
         document.getElementById('setup-area').classList.remove('hidden');
     }
+    
+    // Setup Tap Listeners
+    document.getElementById('tap-left').onclick = (e) => { e.stopPropagation(); prevStatus(); };
+    document.getElementById('tap-right').onclick = (e) => { e.stopPropagation(); nextStatus(); };
 }
 
 function saveUser() {
@@ -73,19 +81,80 @@ async function loadFeed() {
 }
 
 function openViewer(index) {
-    const s = allStatuses[index];
-    const viewer = document.getElementById('viewer');
+    currentIndex = index;
+    document.getElementById('viewer').classList.add('active');
+    renderStatus();
+}
+
+function renderStatus() {
+    clearTimers();
+    const s = allStatuses[currentIndex];
     const content = document.getElementById('viewer-content');
+    const container = document.getElementById('progress-container');
     document.getElementById('viewer-name').innerText = s.Username;
+
+    // Create Progress Bars
+    container.innerHTML = "";
+    allStatuses.forEach((_, i) => {
+        const bar = document.createElement('div');
+        bar.className = "progress-bar";
+        const filler = document.createElement('div');
+        filler.className = "progress-filler";
+        if (i < currentIndex) filler.style.width = "100%";
+        bar.appendChild(filler);
+        container.appendChild(bar);
+    });
+
     if (s.Type === 'image') {
         content.innerHTML = `<img src="${s.MediaURL}" class="max-w-full max-h-full object-contain">`;
+        startTimer(STORY_DURATION);
     } else {
-        content.innerHTML = `<video src="${s.MediaURL}" class="max-w-full max-h-full" autoplay playsinline controls></video>`;
+        content.innerHTML = `<video id="story-video" src="${s.MediaURL}" class="max-w-full max-h-full" autoplay playsinline></video>`;
+        const vid = document.getElementById('story-video');
+        vid.onloadedmetadata = () => startTimer(vid.duration * 1000);
     }
-    viewer.classList.add('active');
+}
+
+function startTimer(duration) {
+    const start = Date.now();
+    const filler = document.querySelectorAll('.progress-filler')[currentIndex];
+    
+    progressInterval = setInterval(() => {
+        const elapsed = Date.now() - start;
+        const progress = (elapsed / duration) * 100;
+        filler.style.width = Math.min(progress, 100) + "%";
+    }, 50);
+
+    storyTimeout = setTimeout(() => {
+        nextStatus();
+    }, duration);
+}
+
+function nextStatus() {
+    if (currentIndex < allStatuses.length - 1) {
+        currentIndex++;
+        renderStatus();
+    } else {
+        closeViewer();
+    }
+}
+
+function prevStatus() {
+    if (currentIndex > 0) {
+        currentIndex--;
+        renderStatus();
+    } else {
+        renderStatus(); // Restart current if at beginning
+    }
+}
+
+function clearTimers() {
+    clearTimeout(storyTimeout);
+    clearInterval(progressInterval);
 }
 
 function closeViewer() {
+    clearTimers();
     document.getElementById('viewer').classList.remove('active');
     document.getElementById('viewer-content').innerHTML = "";
 }

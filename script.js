@@ -8,7 +8,7 @@ let allStatuses = [];
 let currentIndex = 0;
 let storyTimeout;
 let progressInterval;
-const STORY_DURATION = 5000; // 5 seconds for images
+const STORY_DURATION = 5000;
 
 function init() {
     if (userId && username) {
@@ -18,8 +18,6 @@ function init() {
     } else {
         document.getElementById('setup-area').classList.remove('hidden');
     }
-    
-    // Setup Tap Listeners
     document.getElementById('tap-left').onclick = (e) => { e.stopPropagation(); prevStatus(); };
     document.getElementById('tap-right').onclick = (e) => { e.stopPropagation(); nextStatus(); };
 }
@@ -69,12 +67,20 @@ async function loadFeed() {
             const el = document.createElement('div');
             el.className = "relative aspect-vertical bg-gray-900 rounded-2xl overflow-hidden border border-gray-800 cursor-pointer active:scale-95 transition-transform";
             el.onclick = () => openViewer(index);
-            if (s.Type === 'image') {
-                el.innerHTML = `<img src="${s.MediaURL}" class="w-full h-full object-cover">`;
-            } else {
-                el.innerHTML = `<video src="${s.MediaURL}" class="w-full h-full object-cover" muted playsinline></video>`;
-            }
-            el.innerHTML += `<div class="absolute bottom-0 p-3 w-full bg-gradient-to-t from-black/80 text-[10px] font-black uppercase tracking-wider">${s.Username}</div>`;
+            
+            const mediaHtml = s.Type === 'image' 
+                ? `<img src="${s.MediaURL}" class="w-full h-full object-cover">`
+                : `<video src="${s.MediaURL}" class="w-full h-full object-cover" muted playsinline></video>`;
+            
+            el.innerHTML = `
+                ${mediaHtml}
+                <div class="absolute bottom-0 p-3 w-full bg-gradient-to-t from-black/90 flex justify-between items-end">
+                    <span class="text-[10px] font-black uppercase tracking-wider truncate mr-2">${s.Username}</span>
+                    <span class="text-[9px] font-bold text-gray-400 flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                        ${s.Views || 0}
+                    </span>
+                </div>`;
             grid.appendChild(el);
         });
     } catch (e) {}
@@ -84,6 +90,16 @@ function openViewer(index) {
     currentIndex = index;
     document.getElementById('viewer').classList.add('active');
     renderStatus();
+    countView(allStatuses[index].MediaURL);
+}
+
+// NEW: Function to send view increment to Google Sheets
+async function countView(url) {
+    fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: JSON.stringify({ action: "incrementView", mediaUrl: url })
+    });
 }
 
 function renderStatus() {
@@ -93,7 +109,6 @@ function renderStatus() {
     const container = document.getElementById('progress-container');
     document.getElementById('viewer-name').innerText = s.Username;
 
-    // Create Progress Bars
     container.innerHTML = "";
     allStatuses.forEach((_, i) => {
         const bar = document.createElement('div');
@@ -118,22 +133,19 @@ function renderStatus() {
 function startTimer(duration) {
     const start = Date.now();
     const filler = document.querySelectorAll('.progress-filler')[currentIndex];
-    
     progressInterval = setInterval(() => {
         const elapsed = Date.now() - start;
         const progress = (elapsed / duration) * 100;
         filler.style.width = Math.min(progress, 100) + "%";
     }, 50);
-
-    storyTimeout = setTimeout(() => {
-        nextStatus();
-    }, duration);
+    storyTimeout = setTimeout(() => { nextStatus(); }, duration);
 }
 
 function nextStatus() {
     if (currentIndex < allStatuses.length - 1) {
         currentIndex++;
         renderStatus();
+        countView(allStatuses[currentIndex].MediaURL);
     } else {
         closeViewer();
     }
@@ -144,7 +156,7 @@ function prevStatus() {
         currentIndex--;
         renderStatus();
     } else {
-        renderStatus(); // Restart current if at beginning
+        renderStatus();
     }
 }
 
@@ -157,6 +169,7 @@ function closeViewer() {
     clearTimers();
     document.getElementById('viewer').classList.remove('active');
     document.getElementById('viewer-content').innerHTML = "";
+    loadFeed(); // Refresh feed to show new view counts
 }
 
 if ('serviceWorker' in navigator) {

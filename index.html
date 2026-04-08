@@ -7,40 +7,54 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .aspect-vertical { aspect-ratio: 9/16; }
+        #viewer { display: none; }
+        #viewer.active { display: flex; }
     </style>
 </head>
-<body class="bg-black text-white font-sans">
+<body class="bg-black text-white font-sans overflow-x-hidden">
 
     <div id="app" class="min-h-screen w-full flex flex-col p-4">
         <header class="flex justify-between items-center py-4">
-            <h1 class="text-3xl font-bold">Status</h1>
-            <p id="user-display" class="text-gray-500 text-xs"></p>
+            <h1 class="text-3xl font-bold italic tracking-tighter">STATUS</h1>
+            <p id="user-display" class="text-gray-500 text-xs font-mono"></p>
         </header>
         
         <!-- Setup View -->
         <div id="setup-area" class="hidden flex-1 flex flex-col items-center justify-center">
-            <input type="text" id="username-input" placeholder="Enter Nickname" class="bg-gray-900 border border-gray-700 p-3 rounded-lg mb-4 w-64 text-center">
-            <button onclick="saveUser()" class="bg-blue-600 px-8 py-3 rounded-full font-bold">Start</button>
+            <input type="text" id="username-input" placeholder="Enter Nickname" class="bg-gray-900 border border-gray-700 p-4 rounded-2xl mb-4 w-72 text-center text-xl">
+            <button onclick="saveUser()" class="bg-blue-600 px-10 py-4 rounded-full font-bold shadow-lg shadow-blue-900/20">Start Sharing</button>
         </div>
 
         <!-- Main View -->
         <div id="main-area" class="hidden flex-1 flex flex-col">
-            <!-- Upload Section -->
-            <div class="flex flex-col items-center py-6 border-b border-gray-800">
-                <button id="upload-btn" onclick="document.getElementById('media-input').click()" class="bg-white text-black px-8 py-3 rounded-full font-bold shadow-lg active:scale-95 transition-transform">
-                    + Post Status
+            <div class="flex flex-col items-center py-8 border-b border-gray-900">
+                <button id="upload-btn" onclick="document.getElementById('media-input').click()" class="bg-white text-black px-12 py-4 rounded-full font-black text-lg shadow-xl active:scale-95 transition-all">
+                    + POST STATUS
                 </button>
                 <input type="file" id="media-input" class="hidden" accept="image/*,video/*" onchange="handleFile(this)">
-                <p id="status-msg" class="mt-2 text-xs text-blue-400 font-medium"></p>
+                <p id="status-msg" class="mt-4 text-xs text-blue-500 font-bold uppercase tracking-widest"></p>
             </div>
 
-            <!-- Feed Section -->
-            <div class="mt-6">
-                <h2 class="text-xl font-bold mb-4">Discovery</h2>
-                <div id="feed-grid" class="grid grid-cols-2 gap-3">
-                    <!-- Statuses will appear here -->
+            <div class="mt-8">
+                <h2 class="text-sm font-black text-gray-500 uppercase tracking-[0.2em] mb-4">Discovery Feed</h2>
+                <div id="feed-grid" class="grid grid-cols-2 gap-4">
+                    <!-- Cards injected here -->
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- FULL SCREEN VIEWER OVERLAY -->
+    <div id="viewer" class="fixed inset-0 bg-black z-50 flex-col items-center justify-center">
+        <div class="absolute top-0 left-0 w-full p-4 z-50 flex flex-col gap-2 bg-gradient-to-b from-black/80 to-transparent">
+            <div class="flex justify-between items-center">
+                <span id="viewer-name" class="font-bold text-lg"></span>
+                <button onclick="closeViewer()" class="text-3xl p-2">&times;</button>
+            </div>
+        </div>
+        
+        <div id="viewer-content" class="w-full h-full flex items-center justify-center">
+            <!-- Media injected here -->
         </div>
     </div>
 
@@ -51,24 +65,23 @@
 
         let userId = localStorage.getItem('status_userId');
         let username = localStorage.getItem('status_username');
+        let allStatuses = [];
 
         function init() {
             if (userId && username) {
                 document.getElementById('main-area').classList.remove('hidden');
-                document.getElementById('setup-area').classList.add('hidden');
-                document.getElementById('user-display').innerText = username;
+                document.getElementById('user-display').innerText = username.toUpperCase();
                 loadFeed();
             } else {
                 document.getElementById('setup-area').classList.remove('hidden');
-                document.getElementById('main-area').classList.add('hidden');
             }
         }
 
         function saveUser() {
-            const input = document.getElementById('username-input').value;
-            if (input.length < 2) return alert("Nickname too short");
+            const val = document.getElementById('username-input').value;
+            if (val.length < 2) return;
             userId = 'uid_' + Math.random().toString(36).substr(2, 9);
-            username = input;
+            username = val;
             localStorage.setItem('status_userId', userId);
             localStorage.setItem('status_username', username);
             location.reload();
@@ -78,7 +91,7 @@
             const file = input.files[0];
             if (!file) return;
             const msg = document.getElementById('status-msg');
-            msg.innerText = "Uploading...";
+            msg.innerText = "Processing...";
             
             const fileName = `${userId}_${Date.now()}.${file.name.split('.').pop()}`;
             try {
@@ -87,47 +100,64 @@
                     headers: { 'Authorization': `Bearer ${SUPABASE_KEY}`, 'apikey': SUPABASE_KEY, 'Content-Type': file.type },
                     body: file
                 });
-                if (!up.ok) throw new Error("Upload Failed");
+                if (!up.ok) throw new Error();
 
-                const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/status-media/${fileName}`;
+                const url = `${SUPABASE_URL}/storage/v1/object/public/status-media/${fileName}`;
                 await fetch(GOOGLE_SCRIPT_URL, {
                     method: 'POST',
                     mode: 'no-cors',
-                    body: JSON.stringify({ userId, username, mediaUrl: publicUrl, type: file.type.startsWith('video') ? 'video' : 'image' })
+                    body: JSON.stringify({ userId, username, mediaUrl: url, type: file.type.startsWith('video') ? 'video' : 'image' })
                 });
 
-                msg.innerText = "Posted!";
+                msg.innerText = "POSTED!";
+                setTimeout(() => msg.innerText = "", 2000);
                 loadFeed();
-            } catch (e) { msg.innerText = "Error"; }
+            } catch (e) { msg.innerText = "ERROR"; }
         }
 
         async function loadFeed() {
             const grid = document.getElementById('feed-grid');
-            grid.innerHTML = "<p class='text-gray-600'>Loading feed...</p>";
-            
+            grid.innerHTML = "";
             try {
-                const response = await fetch(GOOGLE_SCRIPT_URL);
-                const data = await response.json();
-                
-                grid.innerHTML = "";
-                // Reverse to show newest first
-                data.reverse().forEach(status => {
-                    const card = document.createElement('div');
-                    card.className = "relative aspect-vertical bg-gray-900 rounded-xl overflow-hidden border border-gray-800";
+                const res = await fetch(GOOGLE_SCRIPT_URL);
+                allStatuses = await res.json();
+                allStatuses.reverse().forEach((s, index) => {
+                    const el = document.createElement('div');
+                    el.className = "relative aspect-vertical bg-gray-900 rounded-2xl overflow-hidden border border-gray-800 cursor-pointer active:scale-95 transition-transform";
+                    el.onclick = () => openViewer(index);
                     
-                    if (status.Type === 'image') {
-                        card.innerHTML = `<img src="${status.MediaURL}" class="w-full h-full object-cover">`;
+                    if (s.Type === 'image') {
+                        el.innerHTML = `<img src="${s.MediaURL}" class="w-full h-full object-cover">`;
                     } else {
-                        card.innerHTML = `<video src="${status.MediaURL}" class="w-full h-full object-cover" muted loop playsinline onmouseover="this.play()" onmouseout="this.pause()"></video>`;
+                        el.innerHTML = `<video src="${s.MediaURL}" class="w-full h-full object-cover" muted playsinline></video>`;
                     }
-                    
-                    card.innerHTML += `<div class="absolute bottom-0 left-0 w-full p-2 bg-gradient-to-t from-black text-[10px] font-bold">${status.Username}</div>`;
-                    grid.appendChild(card);
+                    el.innerHTML += `<div class="absolute bottom-0 p-3 w-full bg-gradient-to-t from-black/80 text-[10px] font-black uppercase">${s.Username}</div>`;
+                    grid.appendChild(el);
                 });
-            } catch (e) { grid.innerHTML = "Failed to load feed."; }
+            } catch (e) {}
+        }
+
+        function openViewer(index) {
+            const s = allStatuses[index];
+            const viewer = document.getElementById('viewer');
+            const content = document.getElementById('viewer-content');
+            document.getElementById('viewer-name').innerText = s.Username;
+            
+            if (s.Type === 'image') {
+                content.innerHTML = `<img src="${s.MediaURL}" class="max-w-full max-h-full object-contain">`;
+            } else {
+                content.innerHTML = `<video src="${s.MediaURL}" class="max-w-full max-h-full" autoplay playsinline controls></video>`;
+            }
+            
+            viewer.classList.add('active');
+        }
+
+        function closeViewer() {
+            document.getElementById('viewer').classList.remove('active');
+            document.getElementById('viewer-content').innerHTML = "";
         }
 
         init();
     </script>
 </body>
-  </html>
+</html>

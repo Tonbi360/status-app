@@ -5,9 +5,9 @@ const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxNFRzxTH00cc
 let userId = localStorage.getItem('status_userId');
 let username = localStorage.getItem('status_username');
 
-let groupedStatuses = []; // Array of arrays: [[user1_s1, user1_s2], [user2_s1]]
-let personIndex = 0;      // Current person (Vertical)
-let mediaIndex = 0;       // Current status of that person (Horizontal)
+let groupedStatuses = []; 
+let personIndex = 0;      
+let mediaIndex = 0;       
 
 let storyTimeout, progressInterval;
 let touchStartY = 0;
@@ -24,20 +24,17 @@ function init() {
         document.getElementById('setup-area').classList.remove('hidden');
     }
 
-    // Vertical Swipe Setup
     const home = document.getElementById('view-home');
     home.addEventListener('touchstart', e => touchStartY = e.touches[0].clientY, {passive: true});
     home.addEventListener('touchend', handleSwipe, {passive: true});
     
-    // Horizontal Tap Setup
     document.getElementById('tap-left').onclick = (e) => { e.stopPropagation(); prevMedia(); };
     document.getElementById('tap-right').onclick = (e) => { e.stopPropagation(); nextMedia(); };
 }
 
-// 1. DATA LOADING & GROUPING
 async function fetchData() {
     const streamContainer = document.getElementById('stream-container');
-    streamContainer.innerHTML = "<p class='text-white font-black animate-pulse tracking-tighter text-xl'>FETCHING STREAM...</p>";
+    streamContainer.innerHTML = "<p class='text-white font-black animate-pulse text-xl'>FETCHING STREAM...</p>";
 
     try {
         const res = await fetch(GOOGLE_SCRIPT_URL);
@@ -48,19 +45,18 @@ async function fetchData() {
             return;
         }
 
-        // Handle Rankings (Tab 3)
+        // Render Leaderboard
         const sortedForPoll = [...raw].sort((a, b) => (Number(b.Likes) || 0) - (Number(a.Likes) || 0));
         renderPoll(sortedForPoll);
 
-        // Grouping by UserID
+        // Grouping logic based on your JSON keys
         const groups = {};
         raw.forEach(s => {
-            const uid = s.UserID || s.userId;
+            const uid = s.UserID;
             if (!groups[uid]) groups[uid] = [];
             groups[uid].push(s);
         });
         
-        // Convert to array of arrays, newest first
         groupedStatuses = Object.values(groups).reverse();
         renderStream();
 
@@ -69,7 +65,6 @@ async function fetchData() {
     }
 }
 
-// 2. STREAM RENDERING
 function renderStream() {
     clearTimers();
     if (groupedStatuses.length === 0) return;
@@ -80,12 +75,10 @@ function renderStream() {
     const container = document.getElementById('stream-container');
     const progContainer = document.getElementById('progress-container');
     
-    // Update UI Labels
-    document.getElementById('stream-username').innerText = status.Username || status.username;
+    document.getElementById('stream-username').innerText = status.Username;
     document.getElementById('stream-view-count').innerText = status.Views || 0;
     document.getElementById('stream-vote-count').innerText = status.Likes || 0;
 
-    // Reset & Build Progress Bars
     progContainer.innerHTML = "";
     person.forEach((_, i) => {
         const bar = document.createElement('div');
@@ -97,28 +90,34 @@ function renderStream() {
         progContainer.appendChild(bar);
     });
 
-    // Render Media
-    if (status.Type === 'image' || status.type === 'image') {
-        container.innerHTML = `<img src="${status.MediaURL || status.mediaUrl}" class="w-full h-full object-cover">`;
+    if (status.Type === 'image') {
+        container.innerHTML = `<img src="${status.MediaURL}" class="w-full h-full object-cover">`;
         startTimer(STORY_DURATION);
     } else {
-        container.innerHTML = `<video id="active-video" src="${status.MediaURL || status.mediaUrl}" autoplay playsinline ${isMuted ? 'muted' : ''} class="w-full h-full object-cover"></video>`;
+        container.innerHTML = `<video id="active-video" src="${status.MediaURL}" autoplay playsinline ${isMuted ? 'muted' : ''} class="w-full h-full object-cover"></video>`;
         const vid = document.getElementById('active-video');
+        
+        // Handle browser autoplay restrictions
+        vid.play().catch(() => {
+            isMuted = true;
+            vid.muted = true;
+            vid.play();
+        });
+
         vid.onloadedmetadata = () => startTimer(vid.duration * 1000);
         vid.onended = () => nextMedia();
     }
     
-    countView(status.MediaURL || status.mediaUrl);
+    countView(status.MediaURL);
 }
 
-// 3. NAVIGATION (SWIPES & TAPS)
 function handleSwipe(e) {
     const touchEndY = e.changedTouches[0].clientY;
     const diff = touchStartY - touchEndY;
     if (Math.abs(diff) < 50) return;
     
-    if (diff > 0) nextPerson(); // Swipe Up
-    else prevPerson();         // Swipe Down
+    if (diff > 0) nextPerson(); 
+    else prevPerson();         
 }
 
 function nextMedia() {
@@ -155,7 +154,6 @@ function prevPerson() {
     }
 }
 
-// 4. TAB & UI CONTROLS
 function switchTab(tab) {
     document.querySelectorAll('.view-section').forEach(v => v.classList.add('hidden'));
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -164,7 +162,10 @@ function switchTab(tab) {
     document.getElementById(`nav-${tab}`).classList.add('active');
 
     clearTimers();
-    if (tab === 'home' && groupedStatuses.length > 0) renderStream();
+    if (tab === 'home') {
+        if (groupedStatuses.length > 0) renderStream();
+        else fetchData();
+    }
 }
 
 function toggleMute() {
@@ -186,7 +187,6 @@ function togglePlay() {
     }
 }
 
-// 5. RANKINGS & BACKEND
 function renderPoll(list) {
     const pollArea = document.getElementById('poll-list');
     pollArea.innerHTML = "";
@@ -196,13 +196,13 @@ function renderPoll(list) {
         card.innerHTML = `
             <div class="rank-number">${i + 1}</div>
             <div class="flex-1">
-                <div class="font-black uppercase text-sm">${s.Username || s.username}</div>
+                <div class="font-black uppercase text-sm">${s.Username}</div>
                 <div class="text-[10px] text-gray-500 font-bold">${s.Views || 0} VIEWS</div>
             </div>
             <div class="text-orange-500 font-black">🔥 ${s.Likes || 0}</div>
         `;
         card.onclick = () => {
-            const pIdx = groupedStatuses.findIndex(g => (g[0].UserID || g[0].userId) === (s.UserID || s.userId));
+            const pIdx = groupedStatuses.findIndex(g => g[0].UserID === s.UserID);
             if (pIdx !== -1) {
                 personIndex = pIdx;
                 mediaIndex = 0;
@@ -215,11 +215,12 @@ function renderPoll(list) {
 
 async function voteCurrent() {
     const s = groupedStatuses[personIndex][mediaIndex];
-    document.getElementById('stream-vote-count').innerText = Number(document.getElementById('stream-vote-count').innerText) + 1;
+    const voteEl = document.getElementById('stream-vote-count');
+    voteEl.innerText = Number(voteEl.innerText) + 1;
     fetch(GOOGLE_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
-        body: JSON.stringify({ action: "incrementVote", mediaUrl: s.MediaURL || s.mediaUrl, userId: userId })
+        body: JSON.stringify({ action: "incrementVote", mediaUrl: s.MediaURL, userId: userId })
     });
 }
 
@@ -231,7 +232,6 @@ async function countView(url) {
     });
 }
 
-// 6. UPLOAD & TIMERS
 async function handleFile(input) {
     const file = input.files[0];
     if (!file) return;

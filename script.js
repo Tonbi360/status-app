@@ -4,22 +4,234 @@ const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxNFRzxTH00cc
 
 let userId = localStorage.getItem('status_userId');
 let username = localStorage.getItem('status_username');
-let allStatuses = [];
-let currentIndex = 0;
-let storyTimeout;
-let progressInterval;
+
+let groupedStatuses = []; // Array of arrays [[user1_status1, user1_status2], [user2_status1]]
+let personIndex = 0;      // Vertical index
+let mediaIndex = 0;       // Horizontal index
+
+let storyTimeout, progressInterval;
+let touchStartY = 0;
 const STORY_DURATION = 5000;
+let isMuted = true;
 
 function init() {
     if (userId && username) {
-        document.getElementById('main-area').classList.remove('hidden');
+        document.getElementById('setup-area').classList.add('hidden');
         document.getElementById('user-display').innerText = username.toUpperCase();
-        loadFeed();
+        fetchData();
     } else {
         document.getElementById('setup-area').classList.remove('hidden');
     }
-    document.getElementById('tap-left').onclick = (e) => { e.stopPropagation(); prevStatus(); };
-    document.getElementById('tap-right').onclick = (e) => { e.stopPropagation(); nextStatus(); };
+
+    // Swipe & Tap Setup
+    const home = document.getElementById('view-home');
+    home.addEventListener('touchstart', e => touchStartY = e.touches[0].clientY);
+    home.addEventListener('touchend', handleSwipe);
+    
+    document.getElementById('tap-left').onclick = () => prevMedia();
+    document.getElementById('tap-right').onclick = () => nextMedia();
+}
+
+// TAB NAVIGATION
+function switchTab(tab) {
+    document.querySelectorAll('.view-section').forEach(v => v.classList.add('hidden'));
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    
+    document.getElementById(`view-${tab}`).classList.remove('hidden');
+    document.getElementById(`nav-${tab}`).classList.add('active');
+
+    clearTimers();
+    if (tab === 'home' && groupedStatuses.length > 0) renderStream();
+}
+
+async function fetchData() {
+    try {
+        const res = await fetch(GOOGLE_SCRIPT_URL);
+        const raw = await res.json();
+        
+        // 1. RANKINGS LOGIC (Tab 3)
+        const sortedForPoll = [...raw].sort((a, b) => (b.Likes || 0) - (a.Likes || 0));
+        renderPoll(sortedForPoll);
+
+        // 2. STREAM GROUPING (Tab 1)
+        const groups = {};
+        raw.forEach(s => {
+            if (!groups[s.UserID]) groups[s.UserID] = [];
+            groups[s.UserID].push(s);
+        });
+        // Convert object to array of arrays, newest person first
+        groupedStatuses = Object.values(groups).reverse();
+        
+        if (!document.getElementById('view-home').classList.contains('hidden')) {
+            renderStream();
+        }
+    } catch (e) { console.error("Fetch failed", e); }
+}
+
+function renderStream() {
+    clearTimers();
+    if (groupedStatuses.length === 0) return;
+
+    const person = groupedStatuses[personIndex];
+    const status = person[mediaIndex];
+    
+    const container = document.getElementById('stream-container');
+    const progContainer = document.getElementById('progress-container');
+    
+    document.getElementById('stream-username').innerText = status.Username;
+    document.getElementById('stream-view-count').innerText = status.Views || 0;
+    document.getElementById('stream-vote-count').innerText = status.Likes || 0;
+
+    // Progress Bars
+    progContainer.innerHTML = "";
+    person.forEach((_, i) => {
+        const bar = document.createElement('div');
+        bar.className = "progress-bar";
+        const filler = document.createElement('div');
+        filler.className = "progress-filler";
+        if (i < mediaIndex) filler.style.width = "100%";
+        bar.appendChild(filler);
+        progContainer.appendChild(bar);
+    });
+
+    // Content
+    if (status.Type === 'image') {
+        container.innerHTML = `<img src="${status.MediaURL}" class="fade-in">`;
+        startTimer(STORY_DURATION);
+    } else {
+        container.innerHTML = `<video id="active-video" src="${status.MediaURL}" autoplay playsinline ${isMuted ? 'muted' : ''}></video>`;
+        const vid = document.getElementById('active-video');
+        vid.onloadedmetadata = () => startTimer(vid.duration * 1000);
+    }
+    
+    countView(status.MediaURL);
+}
+
+// HORIZONTAL NAVIGATION (Taps)
+function nextMedia() {
+    if (mediaIndex < groupedStatuses[personIndex].length - 1) {
+        mediaIndex++;
+        renderStream();
+    } else {
+        nextPerson();
+    }
+}
+
+function prevMedia() {
+    if (mediaIndex > 0) {
+        mediaIndex--;
+        renderStream();
+    } else {
+        prevPerson();
+    }
+}
+
+// VERTICAL NAVIGATION (Swipes)
+function handleSwipe(e) {
+    const touchEndY = e.changedTouches[0].clientY;
+    const diff = touchStartY - touchEndY;
+    if (Math.abs(diff) < 50) return; // Ignore small movements
+    
+    if (diff > 0) nextPerson(); // Swipe Up
+    else prevPerson();         // Swipe Down
+}
+
+function nextPerson() {
+    if (personIndex < groupedStatuses.length - 1) {
+        personIndex++;
+        mediaIndex = 0;
+        renderStream();
+    }
+}
+
+function prevPerson() {
+    if (personIndex > 0) {
+        personIndex--;
+        mediaIndex = 0;
+        renderStream();
+    }
+}
+
+// CONTROLS
+function toggleMute() {
+    isMuted = !isMuted;
+    const vid = document.getElementById('active-video');
+    if (vid) vid.muted = isMuted;
+    document.getElementById('mute-btn').innerText = isMuted ? '🔇' : '🔊';
+}
+
+function togglePlay() {
+    const vid = document.getElementById('active-video');
+    if (!vid) return;
+    if (vid.paused) {
+        vid.play();
+        document.getElementById('play-btn').innerText = '⏸';
+    } else {
+        vid.pause();
+        document.getElementById('play-btn').innerText = '▶';
+    }
+}
+
+// POLL RENDERING (Tab 3)
+function renderPoll(list) {
+    const pollArea = document.getElementById('poll-list');
+    pollArea.innerHTML = "";
+    list.slice(0, 100).forEach((s, i) => {
+        const card = document.createElement('div');
+        card.className = `rank-card ${i < 3 ? 'top-3' : ''}`;
+        card.innerHTML = `
+            <div class="rank-number">${i + 1}</div>
+            <div class="flex-1">
+                <div class="font-black uppercase text-sm">${s.Username}</div>
+                <div class="text-[10px] text-gray-500 font-bold">${s.Views || 0} VIEWS</div>
+            </div>
+            <div class="text-orange-500 font-black">🔥 ${s.Likes || 0}</div>
+        `;
+        card.onclick = () => {
+            // Find this person in stream and switch
+            personIndex = groupedStatuses.findIndex(group => group[0].UserID === s.UserID);
+            mediaIndex = 0;
+            switchTab('home');
+        };
+        pollArea.appendChild(card);
+    });
+}
+
+// BACKEND SYNC
+async function countView(url) {
+    fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: JSON.stringify({ action: "incrementView", mediaUrl: url, userId: userId })
+    });
+}
+
+async function voteCurrent() {
+    const s = groupedStatuses[personIndex][mediaIndex];
+    document.getElementById('stream-vote-count').innerText = Number(document.getElementById('stream-vote-count').innerText) + 1;
+    fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: JSON.stringify({ action: "incrementVote", mediaUrl: s.MediaURL, userId: userId })
+    });
+}
+
+// UTILS
+function startTimer(duration) {
+    const start = Date.now();
+    const fillers = document.querySelectorAll('.progress-filler');
+    if (!fillers[mediaIndex]) return;
+
+    progressInterval = setInterval(() => {
+        const elapsed = Date.now() - start;
+        fillers[mediaIndex].style.width = Math.min((elapsed / duration) * 100, 100) + "%";
+    }, 50);
+    storyTimeout = setTimeout(() => nextMedia(), duration);
+}
+
+function clearTimers() {
+    clearTimeout(storyTimeout);
+    clearInterval(progressInterval);
 }
 
 function saveUser() {
@@ -30,175 +242,6 @@ function saveUser() {
     localStorage.setItem('status_userId', userId);
     localStorage.setItem('status_username', username);
     location.reload();
-}
-
-async function handleFile(input) {
-    const file = input.files[0];
-    if (!file) return;
-    const msg = document.getElementById('status-msg');
-    msg.innerText = "UPLOADING...";
-    const fileName = `${userId}_${Date.now()}.${file.name.split('.').pop()}`;
-    try {
-        const up = await fetch(`${SUPABASE_URL}/storage/v1/object/status-media/${fileName}`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${SUPABASE_KEY}`, 'apikey': SUPABASE_KEY, 'Content-Type': file.type },
-            body: file
-        });
-        if (!up.ok) throw new Error();
-        const url = `${SUPABASE_URL}/storage/v1/object/public/status-media/${fileName}`;
-        await fetch(GOOGLE_SCRIPT_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            body: JSON.stringify({ userId, username, mediaUrl: url, type: file.type.startsWith('video') ? 'video' : 'image' })
-        });
-        msg.innerText = "POSTED!";
-        setTimeout(() => msg.innerText = "", 2000);
-        loadFeed();
-    } catch (e) { msg.innerText = "ERROR"; }
-}
-
-async function loadFeed(silent = false) {
-    const grid = document.getElementById('feed-grid');
-    if (!silent) grid.innerHTML = "<p class='text-gray-600 animate-pulse'>Ranking statuses...</p>";
-    
-    try {
-        const res = await fetch(GOOGLE_SCRIPT_URL);
-        allStatuses = await res.json();
-        
-        // SORT BY POPULARITY: Most likes (G) first
-        allStatuses.sort((a, b) => (Number(b.Likes) || 0) - (Number(a.Likes) || 0));
-        
-        grid.innerHTML = "";
-        allStatuses.forEach((s, index) => {
-            const el = document.createElement('div');
-            el.className = "relative aspect-vertical bg-gray-900 rounded-2xl overflow-hidden border border-gray-800 cursor-pointer active:scale-95 transition-transform";
-            el.onclick = () => openViewer(index);
-            
-            const mediaHtml = s.Type === 'image' 
-                ? `<img src="${s.MediaURL}" class="w-full h-full object-cover">`
-                : `<video src="${s.MediaURL}" class="w-full h-full object-cover" muted playsinline></video>`;
-            
-            el.innerHTML = `
-                ${mediaHtml}
-                <div class="absolute top-2 right-2 bg-orange-600 text-[10px] font-black px-2 py-1 rounded-full shadow-lg">
-                    🔥 ${s.Likes || 0}
-                </div>
-                <div class="absolute bottom-0 p-3 w-full bg-gradient-to-t from-black/90 flex justify-between items-end">
-                    <span class="text-[10px] font-black uppercase tracking-wider truncate mr-2">${s.Username}</span>
-                    <span class="text-[9px] font-bold text-gray-400 flex items-center gap-1">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                        ${s.Views || 0}
-                    </span>
-                </div>`;
-            grid.appendChild(el);
-        });
-    } catch (e) {
-        if (!silent) grid.innerHTML = "Failed to load poll.";
-    }
-}
-
-function openViewer(index) {
-    currentIndex = index;
-    document.getElementById('viewer').classList.add('active');
-    renderStatus();
-}
-
-async function countView(url) {
-    fetch(GOOGLE_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        body: JSON.stringify({ action: "incrementView", mediaUrl: url, userId: userId })
-    });
-}
-
-async function voteCurrent() {
-    const s = allStatuses[currentIndex];
-    const voteBtn = document.querySelector('#viewer-footer button');
-    
-    // Optimistic UI update
-    const countEl = document.getElementById('viewer-vote-count');
-    countEl.innerText = Number(countEl.innerText) + 1;
-    voteBtn.classList.add('opacity-50', 'pointer-events-none');
-
-    fetch(GOOGLE_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        body: JSON.stringify({ action: "incrementVote", mediaUrl: s.MediaURL, userId: userId })
-    });
-}
-
-function renderStatus() {
-    clearTimers();
-    const s = allStatuses[currentIndex];
-    const content = document.getElementById('viewer-content');
-    const container = document.getElementById('progress-container');
-    
-    document.getElementById('viewer-name').innerText = s.Username;
-    document.getElementById('viewer-view-count').innerText = s.Views || 0;
-    document.getElementById('viewer-vote-count').innerText = s.Likes || 0;
-
-    container.innerHTML = "";
-    allStatuses.forEach((_, i) => {
-        const bar = document.createElement('div');
-        bar.className = "progress-bar";
-        const filler = document.createElement('div');
-        filler.className = "progress-filler";
-        if (i < currentIndex) filler.style.width = "100%";
-        bar.appendChild(filler);
-        container.appendChild(bar);
-    });
-
-    if (s.Type === 'image') {
-        content.innerHTML = `<img src="${s.MediaURL}" class="max-w-full max-h-full object-contain">`;
-        startTimer(STORY_DURATION);
-    } else {
-        content.innerHTML = `<video id="story-video" src="${s.MediaURL}" class="max-w-full max-h-full" autoplay playsinline></video>`;
-        const vid = document.getElementById('story-video');
-        vid.onloadedmetadata = () => startTimer(vid.duration * 1000);
-    }
-    
-    countView(s.MediaURL);
-}
-
-function startTimer(duration) {
-    const start = Date.now();
-    const filler = document.querySelectorAll('.progress-filler')[currentIndex];
-    progressInterval = setInterval(() => {
-        const elapsed = Date.now() - start;
-        const progress = (elapsed / duration) * 100;
-        filler.style.width = Math.min(progress, 100) + "%";
-    }, 50);
-    storyTimeout = setTimeout(() => { nextStatus(); }, duration);
-}
-
-function nextStatus() {
-    if (currentIndex < allStatuses.length - 1) {
-        currentIndex++;
-        renderStatus();
-    } else {
-        closeViewer();
-    }
-}
-
-function prevStatus() {
-    if (currentIndex > 0) {
-        currentIndex--;
-        renderStatus();
-    } else {
-        renderStatus();
-    }
-}
-
-function clearTimers() {
-    clearTimeout(storyTimeout);
-    clearInterval(progressInterval);
-}
-
-function closeViewer() {
-    clearTimers();
-    document.getElementById('viewer').classList.remove('active');
-    document.getElementById('viewer-content').innerHTML = "";
-    loadFeed(true);
 }
 
 if ('serviceWorker' in navigator) {

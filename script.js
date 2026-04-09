@@ -15,53 +15,65 @@ const STORY_DURATION = 5000;
 let isMuted = true;
 
 function init() {
-    if (userId && username) {
-        document.getElementById('setup-area').classList.add('hidden');
-        document.getElementById('user-display').innerText = username.toUpperCase();
-        switchTab('home');
-        fetchData();
-    } else {
+    // Check Identity
+    if (!userId || !username) {
         document.getElementById('setup-area').classList.remove('hidden');
+    } else {
+        document.getElementById('setup-area').classList.add('hidden');
+        // Initial Startup
+        fetchData();
     }
 
-    const home = document.getElementById('view-home');
-    home.addEventListener('touchstart', e => touchStartY = e.touches[0].clientY, {passive: true});
-    home.addEventListener('touchend', handleSwipe, {passive: true});
-    
+    // Bind Vertical Swipes
+    const homeView = document.getElementById('view-home');
+    homeView.addEventListener('touchstart', e => touchStartY = e.touches[0].clientY, {passive: true});
+    homeView.addEventListener('touchend', e => {
+        const touchEndY = e.changedTouches[0].clientY;
+        const diff = touchStartY - touchEndY;
+        if (Math.abs(diff) > 50) {
+            if (diff > 0) nextPerson(); else prevPerson();
+        }
+    }, {passive: true});
+
+    // Bind Horizontal Taps
     document.getElementById('tap-left').onclick = (e) => { e.stopPropagation(); prevMedia(); };
     document.getElementById('tap-right').onclick = (e) => { e.stopPropagation(); nextMedia(); };
 }
 
+// --- DATA LOGIC ---
+
 async function fetchData() {
-    const streamContainer = document.getElementById('stream-container');
-    streamContainer.innerHTML = "<p class='text-white font-black animate-pulse text-xl'>FETCHING STREAM...</p>";
+    const container = document.getElementById('stream-container');
+    container.innerHTML = "<div class='text-white font-black animate-pulse text-xl tracking-tighter'>LOADING...</div>";
 
     try {
         const res = await fetch(GOOGLE_SCRIPT_URL);
         const raw = await res.json();
         
         if (!raw || raw.length === 0) {
-            streamContainer.innerHTML = "<p class='text-gray-500'>No statuses yet.</p>";
+            container.innerHTML = "<div class='text-gray-500 font-bold'>NO STATUSES YET</div>";
             return;
         }
 
-        // Render Leaderboard
+        // 1. Group by UserID (using exact JSON keys)
+        const groups = {};
+        raw.forEach(item => {
+            const uid = item.UserID;
+            if (!groups[uid]) groups[uid] = [];
+            groups[uid].push(item);
+        });
+        
+        // 2. Sort groups by latest timestamp (reverse)
+        groupedStatuses = Object.values(groups).reverse();
+        
+        // 3. Render Rankings (Tab 3)
         const sortedForPoll = [...raw].sort((a, b) => (Number(b.Likes) || 0) - (Number(a.Likes) || 0));
         renderPoll(sortedForPoll);
 
-        // Grouping logic based on your JSON keys
-        const groups = {};
-        raw.forEach(s => {
-            const uid = s.UserID;
-            if (!groups[uid]) groups[uid] = [];
-            groups[uid].push(s);
-        });
-        
-        groupedStatuses = Object.values(groups).reverse();
-        renderStream();
-
-    } catch (e) { 
-        streamContainer.innerHTML = "<p class='text-red-600 font-bold'>OFFLINE</p>";
+        // 4. Trigger first view
+        switchTab('home');
+    } catch (e) {
+        container.innerHTML = "<div class='text-red-500'>CONNECTION ERROR</div>";
     }
 }
 
@@ -75,10 +87,12 @@ function renderStream() {
     const container = document.getElementById('stream-container');
     const progContainer = document.getElementById('progress-container');
     
+    // Update Labels
     document.getElementById('stream-username').innerText = status.Username;
     document.getElementById('stream-view-count').innerText = status.Views || 0;
     document.getElementById('stream-vote-count').innerText = status.Likes || 0;
 
+    // Reset Progress Bars
     progContainer.innerHTML = "";
     person.forEach((_, i) => {
         const bar = document.createElement('div');
@@ -90,14 +104,14 @@ function renderStream() {
         progContainer.appendChild(bar);
     });
 
+    // Display Media
     if (status.Type === 'image') {
-        container.innerHTML = `<img src="${status.MediaURL}" class="w-full h-full object-cover">`;
+        container.innerHTML = `<img src="${status.MediaURL}" class="media-box fade-in">`;
         startTimer(STORY_DURATION);
     } else {
-        container.innerHTML = `<video id="active-video" src="${status.MediaURL}" autoplay playsinline ${isMuted ? 'muted' : ''} class="w-full h-full object-cover"></video>`;
+        container.innerHTML = `<video id="active-video" src="${status.MediaURL}" autoplay playsinline ${isMuted ? 'muted' : ''} class="media-box"></video>`;
         const vid = document.getElementById('active-video');
         
-        // Handle browser autoplay restrictions
         vid.play().catch(() => {
             isMuted = true;
             vid.muted = true;
@@ -111,14 +125,7 @@ function renderStream() {
     countView(status.MediaURL);
 }
 
-function handleSwipe(e) {
-    const touchEndY = e.changedTouches[0].clientY;
-    const diff = touchStartY - touchEndY;
-    if (Math.abs(diff) < 50) return;
-    
-    if (diff > 0) nextPerson(); 
-    else prevPerson();         
-}
+// --- NAVIGATION ---
 
 function nextMedia() {
     if (mediaIndex < groupedStatuses[personIndex].length - 1) {
@@ -158,15 +165,20 @@ function switchTab(tab) {
     document.querySelectorAll('.view-section').forEach(v => v.classList.add('hidden'));
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
     
-    document.getElementById(`view-${tab}`).classList.remove('hidden');
-    document.getElementById(`nav-${tab}`).classList.add('active');
+    const target = document.getElementById(`view-${tab}`);
+    const nav = document.getElementById(`nav-${tab}`);
+    
+    if (target) target.classList.remove('hidden');
+    if (nav) nav.classList.add('active');
 
-    clearTimers();
     if (tab === 'home') {
-        if (groupedStatuses.length > 0) renderStream();
-        else fetchData();
+        renderStream();
+    } else {
+        clearTimers();
     }
 }
+
+// --- CONTROLS ---
 
 function toggleMute() {
     isMuted = !isMuted;
@@ -187,6 +199,8 @@ function togglePlay() {
     }
 }
 
+// --- UI HELPERS ---
+
 function renderPoll(list) {
     const pollArea = document.getElementById('poll-list');
     pollArea.innerHTML = "";
@@ -196,16 +210,16 @@ function renderPoll(list) {
         card.innerHTML = `
             <div class="rank-number">${i + 1}</div>
             <div class="flex-1">
-                <div class="font-black uppercase text-sm">${s.Username}</div>
-                <div class="text-[10px] text-gray-500 font-bold">${s.Views || 0} VIEWS</div>
+                <div class="font-black uppercase text-[13px] tracking-tight">${s.Username}</div>
+                <div class="text-[9px] text-gray-500 font-bold tracking-widest">${s.Views || 0} VIEWS</div>
             </div>
-            <div class="text-orange-500 font-black">🔥 ${s.Likes || 0}</div>
+            <div class="text-orange-500 font-black text-xs">🔥 ${s.Likes || 0}</div>
         `;
         card.onclick = () => {
             const pIdx = groupedStatuses.findIndex(g => g[0].UserID === s.UserID);
             if (pIdx !== -1) {
                 personIndex = pIdx;
-                mediaIndex = 0;
+                mediaIndex = groupedStatuses[pIdx].findIndex(m => m.MediaURL === s.MediaURL);
                 switchTab('home');
             }
         };
@@ -213,10 +227,29 @@ function renderPoll(list) {
     });
 }
 
+function startTimer(duration) {
+    const start = Date.now();
+    const fillers = document.querySelectorAll('.progress-filler');
+    if (!fillers[mediaIndex]) return;
+
+    progressInterval = setInterval(() => {
+        const elapsed = Date.now() - start;
+        fillers[mediaIndex].style.width = Math.min((elapsed / duration) * 100, 100) + "%";
+    }, 50);
+    storyTimeout = setTimeout(() => nextMedia(), duration);
+}
+
+function clearTimers() {
+    clearTimeout(storyTimeout);
+    clearInterval(progressInterval);
+}
+
+// --- SHARED ACTIONS ---
+
 async function voteCurrent() {
     const s = groupedStatuses[personIndex][mediaIndex];
-    const voteEl = document.getElementById('stream-vote-count');
-    voteEl.innerText = Number(voteEl.innerText) + 1;
+    const el = document.getElementById('stream-vote-count');
+    el.innerText = Number(el.innerText) + 1;
     fetch(GOOGLE_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
@@ -251,26 +284,9 @@ async function handleFile(input) {
             mode: 'no-cors',
             body: JSON.stringify({ userId, username, mediaUrl: url, type: file.type.startsWith('video') ? 'video' : 'image' })
         });
-        msg.innerText = "POSTED!";
-        setTimeout(() => { msg.innerText = ""; switchTab('home'); fetchData(); }, 1500);
-    } catch (e) { msg.innerText = "ERROR"; }
-}
-
-function startTimer(duration) {
-    const start = Date.now();
-    const fillers = document.querySelectorAll('.progress-filler');
-    if (!fillers[mediaIndex]) return;
-
-    progressInterval = setInterval(() => {
-        const elapsed = Date.now() - start;
-        fillers[mediaIndex].style.width = Math.min((elapsed / duration) * 100, 100) + "%";
-    }, 50);
-    storyTimeout = setTimeout(() => nextMedia(), duration);
-}
-
-function clearTimers() {
-    clearTimeout(storyTimeout);
-    clearInterval(progressInterval);
+        msg.innerText = "DONE!";
+        setTimeout(() => { msg.innerText = ""; switchTab('home'); fetchData(); }, 1000);
+    } catch (e) { msg.innerText = "FAIL"; }
 }
 
 function saveUser() {

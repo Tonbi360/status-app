@@ -1,41 +1,52 @@
-/* Core Mobile Reset */
-body { 
-    -webkit-tap-highlight-color: transparent; 
-    overscroll-behavior: none;
-    background-color: black;
+/* 1. Reset & Mobile Fixes */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
-/* Tab Management */
+html, body {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    background-color: black;
+    color: white;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+}
+
+/* 2. Media Layer (The Background) */
+#stream-container img, 
+#stream-container video {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh; /* Dynamic viewport height for mobile browsers */
+    object-fit: cover;
+    display: block;
+}
+
+/* 3. View/Tab Management */
 .view-section {
     position: absolute;
-    top: 0;
-    left: 0;
+    inset: 0;
     width: 100%;
     height: 100%;
-    transition: opacity 0.3s ease;
+    display: flex;
+    flex-direction: column;
 }
 
 .view-section.hidden {
-    display: none;
-    opacity: 0;
-    pointer-events: none;
+    display: none !important;
 }
 
-/* Bottom Nav Active States */
-.nav-btn.active {
-    color: white;
-}
-
-.nav-btn.active svg {
-    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
-}
-
-/* Progress Bar (Story-style) */
+/* 4. Progress Bars (Top of Screen) */
 .progress-bar {
-    height: 2px;
+    height: 3px;
     background: rgba(255, 255, 255, 0.2);
     flex: 1;
-    border-radius: 4px;
+    border-radius: 10px;
     overflow: hidden;
 }
 
@@ -45,43 +56,53 @@ body {
     width: 0%;
 }
 
-/* Full Screen Media Handling */
-#stream-container img, 
-#stream-container video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover; /* This makes it fill like TikTok */
+/* 5. Navigation Bar */
+.nav-btn.active {
+    color: white;
 }
 
-/* Ranking List (Tab 3) */
+#nav-upload {
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+#nav-upload:active {
+    transform: scale(0.8);
+}
+
+/* 6. Rankings (Leaderboard) */
 .rank-card {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 20px;
-    padding: 16px;
+    border-radius: 24px;
+    padding: 20px;
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 20px;
+}
+
+.rank-card:active {
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .rank-number {
-    font-size: 24px;
+    font-size: 28px;
     font-weight: 900;
     font-style: italic;
-    color: #4b5563;
-    min-width: 40px;
+    color: #374151;
+    min-width: 45px;
 }
 
-.rank-card.top-3 .rank-number {
-    color: #fbbf24; /* Gold-ish for top 3 */
+.top-3 .rank-number {
+    color: #fbbf24;
+    text-shadow: 0 0 15px rgba(251, 191, 36, 0.3);
 }
 
-/* Custom Animations */
-@keyframes pulse-soft {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+/* 7. Animations */
+.fade-in {
+    animation: fadeIn 0.4s ease-out forwards;
 }
 
-.animate-pulse-soft {
-    animation: pulse-soft 2s infinite;
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }

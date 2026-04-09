@@ -5,9 +5,9 @@ const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxNFRzxTH00cc
 let userId = localStorage.getItem('status_userId');
 let username = localStorage.getItem('status_username');
 
-let groupedStatuses = []; 
-let personIndex = 0;      
-let mediaIndex = 0;       
+let groupedStatuses = []; // Array of arrays: [[user1_s1, user1_s2], [user2_s1]]
+let personIndex = 0;      // Current person (Vertical)
+let mediaIndex = 0;       // Current status of that person (Horizontal)
 
 let storyTimeout, progressInterval;
 let touchStartY = 0;
@@ -18,67 +18,58 @@ function init() {
     if (userId && username) {
         document.getElementById('setup-area').classList.add('hidden');
         document.getElementById('user-display').innerText = username.toUpperCase();
-        switchTab('home'); // Force home tab state
+        switchTab('home');
         fetchData();
     } else {
         document.getElementById('setup-area').classList.remove('hidden');
     }
 
+    // Vertical Swipe Setup
     const home = document.getElementById('view-home');
-    home.addEventListener('touchstart', e => touchStartY = e.touches[0].clientY);
-    home.addEventListener('touchend', handleSwipe);
+    home.addEventListener('touchstart', e => touchStartY = e.touches[0].clientY, {passive: true});
+    home.addEventListener('touchend', handleSwipe, {passive: true});
     
+    // Horizontal Tap Setup
     document.getElementById('tap-left').onclick = (e) => { e.stopPropagation(); prevMedia(); };
     document.getElementById('tap-right').onclick = (e) => { e.stopPropagation(); nextMedia(); };
 }
 
-function switchTab(tab) {
-    document.querySelectorAll('.view-section').forEach(v => v.classList.add('hidden'));
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-    
-    document.getElementById(`view-${tab}`).classList.remove('hidden');
-    document.getElementById(`nav-${tab}`).classList.add('active');
-
-    clearTimers();
-    if (tab === 'home' && groupedStatuses.length > 0) renderStream();
-}
-
+// 1. DATA LOADING & GROUPING
 async function fetchData() {
     const streamContainer = document.getElementById('stream-container');
-    const pollArea = document.getElementById('poll-list');
-    
-    streamContainer.innerHTML = "<p class='text-gray-500 font-bold animate-pulse'>LOADING STREAM...</p>";
-    pollArea.innerHTML = "<p class='text-gray-500 p-4'>Loading rankings...</p>";
+    streamContainer.innerHTML = "<p class='text-white font-black animate-pulse tracking-tighter text-xl'>FETCHING STREAM...</p>";
 
     try {
         const res = await fetch(GOOGLE_SCRIPT_URL);
         const raw = await res.json();
         
         if (!raw || raw.length === 0) {
-            streamContainer.innerHTML = "<p class='text-gray-500'>No statuses yet. Be the first!</p>";
+            streamContainer.innerHTML = "<p class='text-gray-500'>No statuses yet.</p>";
             return;
         }
 
-        // 1. RANKINGS
+        // Handle Rankings (Tab 3)
         const sortedForPoll = [...raw].sort((a, b) => (Number(b.Likes) || 0) - (Number(a.Likes) || 0));
         renderPoll(sortedForPoll);
 
-        // 2. GROUPING (Using exact Header Names from your Sheet)
+        // Grouping by UserID
         const groups = {};
         raw.forEach(s => {
-            const uid = s.UserID || s.userId; // Handle casing fallback
+            const uid = s.UserID || s.userId;
             if (!groups[uid]) groups[uid] = [];
             groups[uid].push(s);
         });
         
+        // Convert to array of arrays, newest first
         groupedStatuses = Object.values(groups).reverse();
         renderStream();
 
     } catch (e) { 
-        streamContainer.innerHTML = "<p class='text-red-500'>Connection Error</p>";
+        streamContainer.innerHTML = "<p class='text-red-600 font-bold'>OFFLINE</p>";
     }
 }
 
+// 2. STREAM RENDERING
 function renderStream() {
     clearTimers();
     if (groupedStatuses.length === 0) return;
@@ -89,10 +80,12 @@ function renderStream() {
     const container = document.getElementById('stream-container');
     const progContainer = document.getElementById('progress-container');
     
+    // Update UI Labels
     document.getElementById('stream-username').innerText = status.Username || status.username;
     document.getElementById('stream-view-count').innerText = status.Views || 0;
     document.getElementById('stream-vote-count').innerText = status.Likes || 0;
 
+    // Reset & Build Progress Bars
     progContainer.innerHTML = "";
     person.forEach((_, i) => {
         const bar = document.createElement('div');
@@ -104,11 +97,12 @@ function renderStream() {
         progContainer.appendChild(bar);
     });
 
+    // Render Media
     if (status.Type === 'image' || status.type === 'image') {
-        container.innerHTML = `<img src="${status.MediaURL || status.mediaUrl}" class="fade-in">`;
+        container.innerHTML = `<img src="${status.MediaURL || status.mediaUrl}" class="w-full h-full object-cover">`;
         startTimer(STORY_DURATION);
     } else {
-        container.innerHTML = `<video id="active-video" src="${status.MediaURL || status.mediaUrl}" autoplay playsinline ${isMuted ? 'muted' : ''}></video>`;
+        container.innerHTML = `<video id="active-video" src="${status.MediaURL || status.mediaUrl}" autoplay playsinline ${isMuted ? 'muted' : ''} class="w-full h-full object-cover"></video>`;
         const vid = document.getElementById('active-video');
         vid.onloadedmetadata = () => startTimer(vid.duration * 1000);
         vid.onended = () => nextMedia();
@@ -117,11 +111,14 @@ function renderStream() {
     countView(status.MediaURL || status.mediaUrl);
 }
 
+// 3. NAVIGATION (SWIPES & TAPS)
 function handleSwipe(e) {
     const touchEndY = e.changedTouches[0].clientY;
     const diff = touchStartY - touchEndY;
     if (Math.abs(diff) < 50) return;
-    if (diff > 0) nextPerson(); else prevPerson();
+    
+    if (diff > 0) nextPerson(); // Swipe Up
+    else prevPerson();         // Swipe Down
 }
 
 function nextMedia() {
@@ -158,6 +155,18 @@ function prevPerson() {
     }
 }
 
+// 4. TAB & UI CONTROLS
+function switchTab(tab) {
+    document.querySelectorAll('.view-section').forEach(v => v.classList.add('hidden'));
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    
+    document.getElementById(`view-${tab}`).classList.remove('hidden');
+    document.getElementById(`nav-${tab}`).classList.add('active');
+
+    clearTimers();
+    if (tab === 'home' && groupedStatuses.length > 0) renderStream();
+}
+
 function toggleMute() {
     isMuted = !isMuted;
     const vid = document.getElementById('active-video');
@@ -168,10 +177,16 @@ function toggleMute() {
 function togglePlay() {
     const vid = document.getElementById('active-video');
     if (!vid) return;
-    if (vid.paused) { vid.play(); document.getElementById('play-btn').innerText = '⏸'; }
-    else { vid.pause(); document.getElementById('play-btn').innerText = '▶'; }
+    if (vid.paused) {
+        vid.play();
+        document.getElementById('play-btn').innerText = '⏸';
+    } else {
+        vid.pause();
+        document.getElementById('play-btn').innerText = '▶';
+    }
 }
 
+// 5. RANKINGS & BACKEND
 function renderPoll(list) {
     const pollArea = document.getElementById('poll-list');
     pollArea.innerHTML = "";
@@ -198,6 +213,25 @@ function renderPoll(list) {
     });
 }
 
+async function voteCurrent() {
+    const s = groupedStatuses[personIndex][mediaIndex];
+    document.getElementById('stream-vote-count').innerText = Number(document.getElementById('stream-vote-count').innerText) + 1;
+    fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: JSON.stringify({ action: "incrementVote", mediaUrl: s.MediaURL || s.mediaUrl, userId: userId })
+    });
+}
+
+async function countView(url) {
+    fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: JSON.stringify({ action: "incrementView", mediaUrl: url, userId: userId })
+    });
+}
+
+// 6. UPLOAD & TIMERS
 async function handleFile(input) {
     const file = input.files[0];
     if (!file) return;
@@ -220,25 +254,6 @@ async function handleFile(input) {
         msg.innerText = "POSTED!";
         setTimeout(() => { msg.innerText = ""; switchTab('home'); fetchData(); }, 1500);
     } catch (e) { msg.innerText = "ERROR"; }
-}
-
-async function countView(url) {
-    fetch(GOOGLE_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        body: JSON.stringify({ action: "incrementView", mediaUrl: url, userId: userId })
-    });
-}
-
-async function voteCurrent() {
-    const s = groupedStatuses[personIndex][mediaIndex];
-    const voteCount = document.getElementById('stream-vote-count');
-    voteCount.innerText = Number(voteCount.innerText) + 1;
-    fetch(GOOGLE_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        body: JSON.stringify({ action: "incrementVote", mediaUrl: s.MediaURL || s.mediaUrl, userId: userId })
-    });
 }
 
 function startTimer(duration) {

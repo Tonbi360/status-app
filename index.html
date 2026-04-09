@@ -10,76 +10,107 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-black text-white font-sans overflow-x-hidden select-none">
+<body class="bg-black text-white font-sans overflow-hidden select-none">
 
-    <div id="app" class="min-h-screen w-full flex flex-col p-4">
-        <header class="flex justify-between items-center py-4">
-            <h1 class="text-3xl font-bold italic tracking-tighter">STATUS</h1>
-            <p id="user-display" class="text-gray-500 text-xs font-mono"></p>
-        </header>
-        
-        <!-- Setup View -->
-        <div id="setup-area" class="hidden flex-1 flex flex-col items-center justify-center">
-            <input type="text" id="username-input" placeholder="Enter Nickname" class="bg-gray-900 border border-gray-700 p-4 rounded-2xl mb-4 w-72 text-center text-xl outline-none focus:border-blue-600 transition-colors">
-            <button onclick="saveUser()" class="bg-blue-600 px-10 py-4 rounded-full font-bold shadow-lg shadow-blue-900/20 active:scale-95 transition-transform">Start Sharing</button>
-        </div>
-
-        <!-- Main View -->
-        <div id="main-area" class="hidden flex-1 flex flex-col">
-            <div class="flex flex-col items-center py-8 border-b border-gray-900">
-                <button id="upload-btn" onclick="document.getElementById('media-input').click()" class="bg-white text-black px-12 py-4 rounded-full font-black text-lg shadow-xl active:scale-95 transition-all">
-                    + POST STATUS
-                </button>
-                <input type="file" id="media-input" class="hidden" accept="image/*,video/*" onchange="handleFile(this)">
-                <p id="status-msg" class="mt-4 text-[10px] text-blue-500 font-bold uppercase tracking-widest text-center px-4"></p>
-            </div>
-
-            <div class="mt-8">
-                <div class="flex justify-between items-end mb-4">
-                    <h2 class="text-sm font-black text-gray-500 uppercase tracking-[0.2em]">Popularity Poll</h2>
-                    <span class="text-[10px] text-gray-600 font-bold">Resets every 24h</span>
-                </div>
-                <div id="feed-grid" class="grid grid-cols-2 gap-4"></div>
-            </div>
-        </div>
+    <!-- SETUP VIEW (Nickname Entry) -->
+    <div id="setup-area" class="hidden fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-6">
+        <h1 class="text-5xl font-black italic tracking-tighter mb-2">STATUS</h1>
+        <p class="text-gray-500 mb-8 font-bold uppercase tracking-widest text-xs">Ephemeral Identity</p>
+        <input type="text" id="username-input" placeholder="Enter Nickname" class="bg-gray-900 border border-gray-700 p-4 rounded-2xl mb-4 w-full max-w-xs text-center text-xl outline-none focus:border-blue-600 transition-colors">
+        <button onclick="saveUser()" class="bg-blue-600 w-full max-w-xs py-4 rounded-2xl font-bold shadow-lg shadow-blue-900/20 active:scale-95 transition-transform">Start</button>
     </div>
 
-    <!-- FULL SCREEN VIEWER OVERLAY -->
-    <div id="viewer" class="fixed inset-0 bg-black z-50 flex-col items-center justify-center">
-        <!-- Progress Bars -->
-        <div id="progress-container" class="absolute top-0 left-0 w-full p-2 flex gap-1 z-[70]"></div>
-
-        <!-- Header -->
-        <div class="absolute top-4 left-0 w-full p-4 z-[70] flex justify-between items-center bg-gradient-to-b from-black/60 to-transparent">
-            <span id="viewer-name" class="font-bold text-lg"></span>
-            <button onclick="closeViewer()" class="text-3xl px-2">&times;</button>
-        </div>
+    <!-- MAIN APP WRAPPER -->
+    <div id="app" class="h-screen w-full flex flex-col relative">
         
-        <!-- Navigation Tap Zones -->
-        <div class="absolute inset-0 z-[60] flex">
-            <div id="tap-left" class="w-1/3 h-full"></div>
-            <div id="tap-right" class="w-2/3 h-full"></div>
-        </div>
+        <!-- 1. HOME VIEW (TikTok-style Stream) -->
+        <div id="view-home" class="view-section active h-full w-full relative bg-black">
+            <!-- Progress Bars -->
+            <div id="progress-container" class="absolute top-0 left-0 w-full p-2 flex gap-1 z-[70]"></div>
+            
+            <!-- Video/Image Container -->
+            <div id="stream-container" class="w-full h-full flex items-center justify-center"></div>
 
-        <!-- Media -->
-        <div id="viewer-content" class="w-full h-full flex items-center justify-center z-50"></div>
+            <!-- UI Overlay -->
+            <div class="absolute inset-0 z-[60] flex flex-col pointer-events-none">
+                <div class="p-6 flex justify-between items-start pt-10">
+                    <div class="flex flex-col">
+                        <h1 class="text-2xl font-black italic tracking-tighter">STATUS</h1>
+                        <span id="stream-username" class="text-sm font-bold uppercase tracking-widest text-white mt-1 drop-shadow-md"></span>
+                    </div>
+                    <!-- Play Controls -->
+                    <div class="flex gap-2 pointer-events-auto">
+                        <button onclick="toggleMute()" id="mute-btn" class="bg-black/40 backdrop-blur-md p-3 rounded-full border border-white/10">🔇</button>
+                        <button onclick="togglePlay()" id="play-btn" class="bg-black/40 backdrop-blur-md p-3 rounded-full border border-white/10">⏸</button>
+                    </div>
+                </div>
 
-        <!-- Viewer Footer -->
-        <div id="viewer-footer" class="absolute bottom-0 left-0 w-full p-8 z-[70] flex items-center justify-between bg-gradient-to-t from-black/80 to-transparent">
-            <!-- View Count -->
-            <div class="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full backdrop-blur-md">
-                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                <span id="viewer-view-count" class="font-bold text-xs">0</span>
+                <div class="mt-auto p-6 pb-24 flex justify-between items-end">
+                    <div class="flex flex-col gap-3 pointer-events-auto">
+                        <!-- View Count -->
+                        <div class="flex items-center gap-2 bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 w-fit">
+                            <span>👁️</span>
+                            <span id="stream-view-count" class="font-bold text-xs">0</span>
+                        </div>
+                    </div>
+                    <!-- Vote Button -->
+                    <button onclick="voteCurrent()" class="pointer-events-auto bg-orange-600 p-6 rounded-full shadow-2xl shadow-orange-900/40 active:scale-75 transition-transform flex flex-col items-center">
+                        <span class="text-2xl">🔥</span>
+                        <span id="stream-vote-count" class="font-black text-[10px] mt-1">0</span>
+                    </button>
+                </div>
             </div>
 
-            <!-- Vote Button -->
-            <button onclick="voteCurrent()" class="flex items-center gap-2 bg-orange-600 px-6 py-2 rounded-full shadow-lg shadow-orange-900/40 active:scale-90 transition-transform">
-                <span class="text-lg">🔥</span>
-                <span id="viewer-vote-count" class="font-black text-xs">0</span>
-            </button>
+            <!-- Swipe/Tap Zones -->
+            <div class="absolute inset-0 z-[50] flex flex-col">
+                <div class="flex flex-1">
+                    <div id="tap-left" class="w-1/4 h-full pointer-events-auto"></div>
+                    <div id="tap-right" class="w-3/4 h-full pointer-events-auto"></div>
+                </div>
+            </div>
         </div>
+
+        <!-- 2. UPLOAD VIEW -->
+        <div id="view-upload" class="view-section hidden h-full w-full bg-black flex flex-col items-center justify-center p-8">
+            <div class="text-center mb-10">
+                <h2 class="text-3xl font-black mb-2 uppercase">Share Now</h2>
+                <p class="text-gray-500 text-sm">Photos or Videos (Max 20MB)</p>
+            </div>
+            <button id="upload-btn" onclick="document.getElementById('media-input').click()" class="bg-white text-black w-full max-w-xs py-6 rounded-3xl font-black text-2xl shadow-2xl active:scale-95 transition-all">
+                SELECT MEDIA
+            </button>
+            <input type="file" id="media-input" class="hidden" accept="image/*,video/*" onchange="handleFile(this)">
+            <p id="status-msg" class="mt-6 text-sm text-blue-500 font-bold uppercase tracking-widest animate-pulse"></p>
+        </div>
+
+        <!-- 3. POLL VIEW (Leaderboard) -->
+        <div id="view-poll" class="view-section hidden h-full w-full bg-black flex flex-col p-6 overflow-y-auto pb-32">
+            <div class="flex justify-between items-end mb-8 pt-6">
+                <h2 class="text-3xl font-black italic tracking-tighter">TOP 100</h2>
+                <span class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Global Rankings</span>
+            </div>
+            <div id="poll-list" class="flex flex-col gap-4">
+                <!-- Ranked List Items -->
+            </div>
+        </div>
+
+        <!-- BOTTOM NAVIGATION BAR -->
+        <nav class="fixed bottom-0 left-0 w-full h-20 bg-black/80 backdrop-blur-xl border-t border-white/5 flex justify-around items-center z-[100] px-4">
+            <button onclick="switchTab('home')" class="nav-btn flex flex-col items-center gap-1 text-gray-500 transition-colors" id="nav-home">
+                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+                <span class="text-[10px] font-bold">HOME</span>
+            </button>
+            <button onclick="switchTab('upload')" class="nav-btn bg-white rounded-2xl p-3 -mt-10 shadow-xl" id="nav-upload">
+                <svg class="w-8 h-8 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <button onclick="switchTab('poll')" class="nav-btn flex flex-col items-center gap-1 text-gray-500 transition-colors" id="nav-poll">
+                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M16 11V5h4v6h-4zm-6 4V5h4v10h-4zm-6 4V5h4v14H4z"/></svg>
+                <span class="text-[10px] font-bold">RANKINGS</span>
+            </button>
+        </nav>
+
     </div>
 
     <script src="script.js"></script>
 </body>
-    </html>
+</html>

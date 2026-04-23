@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
     <title>Status</title>
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
@@ -24,7 +24,7 @@
     <div id="app" class="h-screen w-full flex flex-col relative">
         
         <!-- 1. HOME VIEW (TikTok Stream) -->
-        <div id="view-home" class="view-section active h-full w-full relative overflow-hidden bg-black">
+        <div id="view-home" class="view-section active h-full w-full relative overflow-hidden bg-black pb-24">
             
             <!-- MEDIA LAYER (Deepest) -->
             <div id="stream-container" class="absolute inset-0 w-full h-full flex items-center justify-center z-10"></div>
@@ -47,14 +47,13 @@
                         </div>
                         <!-- Controls -->
                         <div class="flex gap-3 pointer-events-auto">
-                            <button onclick="toggleMute()" id="mute-btn" class="bg-black/20 backdrop-blur-md w-12 h-12 rounded-full border border-white/10 flex items-center justify-center text-xl">🔇</button>
-                            <button onclick="togglePlay()" id="play-btn" class="bg-black/20 backdrop-blur-md w-12 h-12 rounded-full border border-white/10 flex items-center justify-center text-xl">⏸</button>
+                            <button onclick="toggleMute()" id="mute-btn" class="bg-black/20 backdrop-blur-md w-12 h-12 rounded-full border border-white/10 flex items-center justify-center text-xl">🔇</button>                            <button onclick="togglePlay()" id="play-btn" class="bg-black/20 backdrop-blur-md w-12 h-12 rounded-full border border-white/10 flex items-center justify-center text-xl">⏸</button>
                         </div>
                     </div>
                 </div>
 
                 <!-- Bottom UI: Engagement -->
-                <div class="mt-auto p-6 pb-28 flex justify-between items-end">
+                <div class="mt-auto p-6 pb-8 flex justify-between items-end">
                     <div class="flex flex-col gap-2 pointer-events-auto">
                         <div class="flex items-center gap-2 bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/5">
                             <span class="text-sm">👁️</span>
@@ -97,8 +96,7 @@
             <button onclick="switchTab('home')" class="nav-btn flex flex-col items-center gap-1 text-gray-600 transition-all" id="nav-home">
                 <svg class="w-7 h-7" fill="currentColor" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
                 <span class="text-[9px] font-black tracking-widest">HOME</span>
-            </button>
-            <button onclick="switchTab('upload')" class="nav-btn bg-white w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl active:scale-90 transition-transform" id="nav-upload">
+            </button>            <button onclick="switchTab('upload')" class="nav-btn bg-white w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl active:scale-90 transition-transform" id="nav-upload">
                 <svg class="w-8 h-8 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="4"><path d="M12 5v14M5 12h14"/></svg>
             </button>
             <button onclick="switchTab('poll')" class="nav-btn flex flex-col items-center gap-1 text-gray-600 transition-all" id="nav-poll">

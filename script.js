@@ -14,6 +14,9 @@ let touchStartY = 0;
 const STORY_DURATION = 5000;
 let isMuted = true;
 
+// 🆕 FIX #3: Debounce timer for votes
+let voteTimeout;
+
 function init() {
     // Check Identity
     if (!userId || !username) {
@@ -45,7 +48,6 @@ function init() {
 async function fetchData() {
     const container = document.getElementById('stream-container');
     container.innerHTML = "<div class='text-white font-black animate-pulse text-xl tracking-tighter'>LOADING...</div>";
-
     try {
         const res = await fetch(GOOGLE_SCRIPT_URL);
         const raw = await res.json();
@@ -94,8 +96,7 @@ function renderStream() {
 
     // Reset Progress Bars
     progContainer.innerHTML = "";
-    person.forEach((_, i) => {
-        const bar = document.createElement('div');
+    person.forEach((_, i) => {        const bar = document.createElement('div');
         bar.className = "progress-bar";
         const filler = document.createElement('div');
         filler.className = "progress-filler";
@@ -118,6 +119,12 @@ function renderStream() {
             vid.play();
         });
 
+        // 🆕 FIX #2: Video error handler
+        vid.onerror = () => {
+          document.getElementById('stream-container').innerHTML = 
+            "<div class='text-red-500 font-black'>MEDIA FAILED • SWIPE TO SKIP</div>";
+        };
+
         vid.onloadedmetadata = () => startTimer(vid.duration * 1000);
         vid.onended = () => nextMedia();
     }
@@ -138,8 +145,7 @@ function nextMedia() {
 
 function prevMedia() {
     if (mediaIndex > 0) {
-        mediaIndex--;
-        renderStream();
+        mediaIndex--;        renderStream();
     } else {
         prevPerson();
     }
@@ -188,8 +194,7 @@ function toggleMute() {
 }
 
 function togglePlay() {
-    const vid = document.getElementById('active-video');
-    if (!vid) return;
+    const vid = document.getElementById('active-video');    if (!vid) return;
     if (vid.paused) {
         vid.play();
         document.getElementById('play-btn').innerText = '⏸';
@@ -238,7 +243,6 @@ function startTimer(duration) {
     }, 50);
     storyTimeout = setTimeout(() => nextMedia(), duration);
 }
-
 function clearTimers() {
     clearTimeout(storyTimeout);
     clearInterval(progressInterval);
@@ -246,15 +250,19 @@ function clearTimers() {
 
 // --- SHARED ACTIONS ---
 
+// 🆕 FIX #3: Debounced vote function
 async function voteCurrent() {
+  clearTimeout(voteTimeout);
+  voteTimeout = setTimeout(() => {
     const s = groupedStatuses[personIndex][mediaIndex];
     const el = document.getElementById('stream-vote-count');
     el.innerText = Number(el.innerText) + 1;
     fetch(GOOGLE_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        body: JSON.stringify({ action: "incrementVote", mediaUrl: s.MediaURL, userId: userId })
+      method: 'POST',
+      mode: 'no-cors',
+      body: JSON.stringify({ action: "incrementVote", mediaUrl: s.MediaURL, userId: userId })
     });
+  }, 200);
 }
 
 async function countView(url) {
@@ -265,9 +273,18 @@ async function countView(url) {
     });
 }
 
+// 🆕 FIX #1: File size validation in handleFile
 async function handleFile(input) {
     const file = input.files[0];
     if (!file) return;
+    
+    // Check file size (20MB max)
+    if (file.size > 20 * 1024 * 1024) {
+      document.getElementById('status-msg').innerText = "FILE TOO LARGE (20MB MAX)";
+      input.value = '';
+      return;
+    }
+    
     const msg = document.getElementById('status-msg');
     msg.innerText = "UPLOADING...";
     const fileName = `${userId}_${Date.now()}.${file.name.split('.').pop()}`;
@@ -275,8 +292,7 @@ async function handleFile(input) {
         const up = await fetch(`${SUPABASE_URL}/storage/v1/object/status-media/${fileName}`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${SUPABASE_KEY}`, 'apikey': SUPABASE_KEY, 'Content-Type': file.type },
-            body: file
-        });
+            body: file        });
         if (!up.ok) throw new Error();
         const url = `${SUPABASE_URL}/storage/v1/object/public/status-media/${fileName}`;
         await fetch(GOOGLE_SCRIPT_URL, {

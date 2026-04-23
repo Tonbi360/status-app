@@ -17,19 +17,37 @@ html, body {
     overscroll-behavior: none;
 }
 
-/* 2. Media Layer (The Background) */
-#stream-container img, 
-#stream-container video {
-    width: 100vw;
-    height: 100vh;
-    height: 100dvh; /* Dynamic viewport height for mobile browsers */
-    object-fit: cover;
-    display: block;
+/* 🆕 SAFE AREA FIXES */
+body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
 }
 
+/* 2. Media Layer (The Background) - FIXED */
+#stream-container img, 
+#stream-container video {
+    width: 100%;
+    height: 100%;
+    max-width: 100vw;
+    max-height: 100dvh;
+    object-fit: contain; /* ← CHANGED FROM cover TO contain */
+    display: block;
+    margin: auto; /* Centers media if letterboxed */
+}
+
+/* 🆕 Optional: If you WANT cover but with smart positioning */
+/*
+#stream-container img.cover-mode,
+#stream-container video.cover-mode {
+    object-fit: cover;
+    object-position: center top; /* Prioritize faces/top of frame */
+}
+*/
+
 /* 3. View/Tab Management */
-.view-section {
-    position: absolute;
+.view-section {    position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
@@ -79,7 +97,6 @@ html, body {
     align-items: center;
     gap: 20px;
 }
-
 .rank-card:active {
     background: rgba(255, 255, 255, 0.1);
 }
